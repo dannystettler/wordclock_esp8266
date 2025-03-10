@@ -222,7 +222,7 @@ void setup() {
   EEPROM.begin(EEPROM_SIZE);
 
   // configure button pin as input
-  pinMode(BUTTONPIN, INPUT_PULLUP);
+  pinMode(BUTTONPIN, INPUT_PULLDOWN);
 
   // setup Matrix LED functions
   ledmatrix.setupMatrix();

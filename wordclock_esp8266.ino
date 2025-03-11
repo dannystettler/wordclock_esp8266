@@ -48,7 +48,7 @@
 //                                        CONSTANTS
 // ----------------------------------------------------------------------------------
 
-#define EEPROM_SIZE 30      // size of EEPROM to save persistent variables
+#define EEPROM_SIZE 32      // size of EEPROM to save persistent variables
 #define ADR_NM_START_H 0
 #define ADR_NM_END_H 4
 #define ADR_NM_START_M 8
@@ -61,6 +61,7 @@
 #define ADR_NM_ACTIVATED 27
 #define ADR_COLSHIFTSPEED 28
 #define ADR_COLSHIFTACTIVE 29
+#define ADR_COLORPRESET 31
 
 
 #define NEOPIXELPIN 5       // pin to which the NeoPixels are attached
@@ -151,14 +152,15 @@ Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(WIDTH, HEIGHT+1, NEOPIXELPIN,
 
 // seven predefined colors24bit (green, red, yellow, purple, orange, lightgreen, blue, gold) 
 const uint32_t colors24bit[NUM_COLORS] = {
-  LEDMatrix::Color24bit(0, 255, 0),
-  LEDMatrix::Color24bit(255, 0, 0),
-  LEDMatrix::Color24bit(200, 200, 0),
-  LEDMatrix::Color24bit(255, 0, 200),
-  LEDMatrix::Color24bit(255, 128, 0), 
-  LEDMatrix::Color24bit(0, 128, 0), 
-  LEDMatrix::Color24bit(0, 0, 255),
-  LEDMatrix::Color24bit(229, 184, 11) }; //gold
+  LEDMatrix::Color24bit(0, 255, 0),       //green
+  LEDMatrix::Color24bit(255, 0, 0),       //red
+  LEDMatrix::Color24bit(200, 200, 0),     //yellow
+  LEDMatrix::Color24bit(255, 0, 200),     //purple
+  LEDMatrix::Color24bit(255, 128, 0),     //orange
+  LEDMatrix::Color24bit(0, 128, 0),       //lightgreen
+  LEDMatrix::Color24bit(0, 0, 255),       //blue
+  LEDMatrix::Color24bit(215, 148, 46) };  //gold
+
 
 uint8_t brightness = 40;            // current brightness of leds
 bool sprialDir = false;
@@ -191,6 +193,7 @@ bool nightModeActivated = true;               // stores if the function nightmod
 bool ledOff = false;                          // stores state of led off
 uint32_t maincolor_clock = colors24bit[2];    // color of the clock and digital clock
 uint32_t maincolor_snake = colors24bit[1];    // color of the random snake animation
+uint8_t activeColorPreset = 0;                // stores the number of the active color preset 
 bool apmode = false;                          // stores if WiFi AP mode is active
 bool dynColorShiftActive = false;              // stores if dynamic color shift is active
 uint8_t dynColorShiftPhase = 0;               // stores the phase of the dynamic color shift
@@ -231,7 +234,8 @@ void setup() {
 
   if(ESP.getResetReason().equals("Power On") || ESP.getResetReason().equals("External System")){
     // Turn on minutes leds (blue)
-    ledmatrix.setMinIndicator(15, colors24bit[6]);
+    activeColorPreset = 6;
+    ledmatrix.setMinIndicator(15, colors24bit[activeColorPreset]);
     ledmatrix.drawOnMatrixInstant();
   }
 
@@ -363,7 +367,8 @@ void setup() {
     for(int r = 0; r < HEIGHT; r++){
         for(int c = 0; c < WIDTH; c++){
         matrix.fillScreen(0);
-        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[2]));
+        activeColorPreset = 2; //red
+        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[activeColorPreset]));
         matrix.show();
         delay(10); 
         }
@@ -416,7 +421,8 @@ void loop() {
     // Check wifi status (only if no apmode)
     if(!apmode && WiFi.status() != WL_CONNECTED){
       Serial.println("connection lost");
-      ledmatrix.gridAddPixel(0, 5, colors24bit[1]);
+      activeColorPreset = 1;  //green
+      ledmatrix.gridAddPixel(0, 5, colors24bit[activeColorPreset]);
       ledmatrix.drawOnMatrixInstant();
       delay(1000);
     }
@@ -673,7 +679,8 @@ void entryAction(uint8_t state){
       ledmatrix.setDynamicColorShiftPhase(-1); // disable dyn. color shift
       if(stateAutoChange){
         behaviorUpdatePeriod = PERIOD_ANIMATION;
-        randomsnake(true, 8, colors24bit[1], -1);
+        activeColorPreset = 1;
+        randomsnake(true, 8, colors24bit[activeColorPreset], -1);
       }
       else{
         behaviorUpdatePeriod = PERIOD_SNAKE;
@@ -801,7 +808,20 @@ void handleButton(){
       if(ledOff){
         ledOff = false;
       }else{
-        stateChange((currentState + 1) % NUM_STATES, true);
+        //stateChange((currentState + 1) % NUM_STATES, true);
+
+        //loop through the Color Presets and save the preset to EEPROM
+        activeColorPreset = (EEPROM.read(ADR_COLORPRESET) + 1) % NUM_COLORS;
+        EEPROM.write(ADR_COLORPRESET, activeColorPreset);
+        EEPROM.commit();
+
+        uint8_t red = colors24bit[activeColorPreset] >> 16 & 0xff;
+        uint8_t green = colors24bit[activeColorPreset] >> 8 & 0xff;
+        uint8_t blue = colors24bit[activeColorPreset] & 0xff;
+
+        logger.logString("Colorpreset: " + String(activeColorPreset));
+        logger.logColor24bit(colors24bit[activeColorPreset]);
+        setMainColor(red, green, blue);
       }
       
     }
@@ -830,7 +850,8 @@ void loadMainColorFromEEPROM(){
   uint8_t green = EEPROM.read(ADR_MC_GREEN);
   uint8_t blue = EEPROM.read(ADR_MC_BLUE);
   if(int(red) + int(green) + int(blue) < 50){
-    maincolor_clock = colors24bit[2];
+    activeColorPreset = 2;
+    maincolor_clock = colors24bit[activeColorPreset];
   }else{
     maincolor_clock = LEDMatrix::Color24bit(red, green, blue);
   }
@@ -992,7 +1013,8 @@ void handleCommand() {
     for(int r = 0; r < HEIGHT; r++){
       for(int c = 0; c < WIDTH; c++){
         matrix.fillScreen(0);
-        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[2]));
+        activeColorPreset = 2;
+        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[activeColorPreset]));
         matrix.show();
         delay(10); 
         }

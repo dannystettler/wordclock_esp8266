@@ -90,7 +90,7 @@
 #define DEFAULT_SMOOTHING_FACTOR 0.5
 
 // number of colors in colors array
-#define NUM_COLORS 7
+#define NUM_COLORS 8
 
 // own datatype for matrix movement (snake and spiral)
 enum direction {right, left, up, down};
@@ -149,7 +149,7 @@ Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(WIDTH, HEIGHT+1, NEOPIXELPIN,
   NEO_GRB            + NEO_KHZ800);
 
 
-// seven predefined colors24bit (green, red, yellow, purple, orange, lightgreen, blue) 
+// seven predefined colors24bit (green, red, yellow, purple, orange, lightgreen, blue, gold) 
 const uint32_t colors24bit[NUM_COLORS] = {
   LEDMatrix::Color24bit(0, 255, 0),
   LEDMatrix::Color24bit(255, 0, 0),
@@ -157,7 +157,8 @@ const uint32_t colors24bit[NUM_COLORS] = {
   LEDMatrix::Color24bit(255, 0, 200),
   LEDMatrix::Color24bit(255, 128, 0), 
   LEDMatrix::Color24bit(0, 128, 0), 
-  LEDMatrix::Color24bit(0, 0, 255) };
+  LEDMatrix::Color24bit(0, 0, 255),
+  LEDMatrix::Color24bit(229, 184, 11) }; //gold
 
 uint8_t brightness = 40;            // current brightness of leds
 bool sprialDir = false;

@@ -66,6 +66,7 @@
 
 #define NEOPIXELPIN 5       // pin to which the NeoPixels are attached
 #define BUTTONPIN 14        // pin to which the button is attached
+#define LDRPIN A0          // pin to which the photoresistor is connected (analog valued from 0-1024) ambient light 
 #define LEFT 1
 #define RIGHT 2
 #define LINE 10
@@ -82,11 +83,12 @@
 #define PERIOD_TIMEVISUUPDATE 1000
 #define PERIOD_MATRIXUPDATE 100
 #define PERIOD_NIGHTMODECHECK 20000
+#define PERIOD_LDRCHECK 5000
 
 #define SHORTPRESS 100
 #define LONGPRESS 2000
 
-#define CURRENT_LIMIT_LED 2500 // limit the total current sonsumed by LEDs (mA)
+#define CURRENT_LIMIT_LED 3500 // limit the total current sonsumed by LEDs (mA)
 
 #define DEFAULT_SMOOTHING_FACTOR 0.5
 
@@ -159,10 +161,10 @@ const uint32_t colors24bit[NUM_COLORS] = {
   LEDMatrix::Color24bit(255, 128, 0),     //orange
   LEDMatrix::Color24bit(0, 128, 0),       //lightgreen
   LEDMatrix::Color24bit(0, 0, 255),       //blue
-  LEDMatrix::Color24bit(215, 148, 46) };  //gold
+  LEDMatrix::Color24bit(215, 148, 46) };  //gold  
 
 
-uint8_t brightness = 40;            // current brightness of leds
+uint8_t brightness = 80;            // current brightness of leds
 bool sprialDir = false;
 
 // timestamp variables
@@ -173,6 +175,7 @@ long lastStateChange = millis();    // time of last state change
 long lastNTPUpdate = millis() - (PERIOD_NTPUPDATE-3000);  // time of last NTP update
 long lastAnimationStep = millis();  // time of last Matrix update
 long lastNightmodeCheck = millis()  - (PERIOD_NIGHTMODECHECK-3000); // time of last nightmode check
+long lastLDRCheck = millis();       // time of last LDR ambient light check
 long buttonPressStart = 0;          // time of push button press start 
 uint16_t behaviorUpdatePeriod = PERIOD_TIMEVISUUPDATE; // holdes the period in which the behavior should be updated
 
@@ -415,7 +418,7 @@ void loop() {
 
   // send regularly heartbeat messages via UDP multicast
   if(millis() - lastheartbeat > PERIOD_HEARTBEAT){
-    logger.logString("Heartbeat, state: " + stateNames[currentState] + ", FreeHeap: " + ESP.getFreeHeap() + ", HeapFrag: " + ESP.getHeapFragmentation() + ", MaxFreeBlock: " + ESP.getMaxFreeBlockSize() + "\n");
+    logger.logString("Heartbeat, state: " + stateNames[currentState] + ", FreeHeap: " + ESP.getFreeHeap() + ", HeapFrag: " + ESP.getHeapFragmentation() + ", MaxFreeBlock: " + ESP.getMaxFreeBlockSize() + " , Brightness: " + brightness + "\n");
     lastheartbeat = millis();
 
     // Check wifi status (only if no apmode)
@@ -447,6 +450,16 @@ void loop() {
 
   // handle button press
   handleButton();
+
+
+  // LDR ambient light check
+  if(millis() - lastLDRCheck > PERIOD_LDRCHECK) {
+    logger.logString("LDR: " + String(analogRead(LDRPIN)));
+    brightness = 255 * analogRead(LDRPIN) / 1024;
+    if(brightness < 10) brightness = 10;
+    ledmatrix.setBrightness(brightness);
+    lastLDRCheck = millis();
+  }
 
   // handle state changes
   if(stateAutoChange && (millis() - lastStateChange > PERIOD_STATECHANGE) && !nightMode && !ledOff){

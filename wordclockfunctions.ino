@@ -151,7 +151,7 @@ String timeToString(uint8_t hours,uint8_t minutes){
   {
       hours -= 12;
   }
-  if(minutes >= 15)
+  if(minutes >= 25)
   {
       hours++;
   }

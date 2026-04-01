@@ -33,11 +33,12 @@
 #include "Base64.h"                    // copied from https://github.com/Xander-Electronics/Base64 
 #include <DNSServer.h>
 #include <WiFiManager.h>                //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
-#include <EEPROM.h>                     //from ESP8266 Arduino Core (automatically installed when ESP8266 was installed via Boardmanager)
+#include <EEPROM.h> 
+#include <time.h>                    //from ESP8266 Arduino Core (automatically installed when ESP8266 was installed via Boardmanager)
 
 // own libraries
 #include "udplogger.h"
-#include "ntp_client_plus.h"
+//#include "ntp_client_plus.h"
 #include "ledmatrix.h"
 #include "tetris.h"
 #include "snake.h"
@@ -128,6 +129,12 @@ const String hostname = "wordclock";
 // URL DNS server
 const char WebserverURL[] = "www.wordclock.local";
 
+// NTP
+#define NTP_SERVER "ch.pool.ntp.org"           
+#define NTP_TZ "CET-1CEST,M3.5.0/02,M10.5.0/03"
+time_t now;                         // this are the seconds since Epoch (1970) - UTC
+tm tm; 
+
 int utcOffset = 60; // UTC offset in minutes
 
 // ----------------------------------------------------------------------------------
@@ -182,7 +189,7 @@ uint16_t behaviorUpdatePeriod = PERIOD_TIMEVISUUPDATE; // holdes the period in w
 // Create necessary global objects
 UDPLogger logger;
 WiFiUDP NTPUDP;
-NTPClientPlus ntp = NTPClientPlus(NTPUDP, "pool.ntp.org", utcOffset, true);
+//NTPClientPlus ntp = NTPClientPlus(NTPUDP, "pool.ntp.org", utcOffset, true);
 LEDMatrix ledmatrix = LEDMatrix(&matrix, brightness, &logger);
 Tetris mytetris = Tetris(&ledmatrix, &logger);
 Snake mysnake = Snake(&ledmatrix, &logger);
@@ -275,7 +282,6 @@ void setup() {
   }
 
    
-  
   /** (alternative) Use directly STA/AP Mode of ESP8266   **/
   
   /* 
@@ -352,11 +358,16 @@ void setup() {
   delay(10);
   logger.logString("Reset Reason: " + ESP.getResetReason());
 
+  // setup NTP (old)
+  //updateUTCOffsetFromTimezoneAPI(logger, ntp);
+  //ntp.setupNTPClient();
+  //logger.logString("NTP running");
+  //logger.logString("Time: " +  ntp.getFormattedTime());
+
   // setup NTP
-  updateUTCOffsetFromTimezoneAPI(logger, ntp);
-  ntp.setupNTPClient();
   logger.logString("NTP running");
-  logger.logString("Time: " +  ntp.getFormattedTime());
+  configTime(NTP_TZ, NTP_SERVER); // --> Here is the IMPORTANT ONE LINER needed in your sketch!
+
 
   // load persistent variables from EEPROM
   loadMainColorFromEEPROM();
@@ -472,6 +483,24 @@ void loop() {
 
   // NTP time update
   if(millis() - lastNTPUpdate > PERIOD_NTPUPDATE){
+
+    //new NTP 
+    time(&now);                       // read the current time
+    localtime_r(&now, &tm);           // update the structure tm with the current time
+    lastNTPUpdate = millis();
+    logger.logString("New NTP-Update");
+    logger.logString("Date: " +  String(tm.tm_mday) + "." + String(tm.tm_mon + 1) + "." + String(tm.tm_year + 1900));
+    logger.logString("Time: " +  String(tm.tm_hour) + ":" + String(tm.tm_min) + ":" + String(tm.tm_sec));
+    logger.logString("Day of Week (Sun=0, Sat=6): " +  String(tm.tm_wday));
+     // Daylight Saving Time flag
+    if (tm.tm_isdst == 1)            
+      logger.logString("Summertime");
+    else
+      logger.logString("Wintertime");
+
+    
+    /* remove old ntp code
+    //old NTP 
     int res = ntp.updateNTP();
     if(res == 0){
       ntp.calcDate();
@@ -509,7 +538,7 @@ void loop() {
       logger.logString("NTP-Update not successful. Reason: NTP time not valid (<1970)");
       lastNTPUpdate += 10000;
       watchdogCounter--;
-    }
+    } */
 
     logger.logString("Watchdog Counter: " + String(watchdogCounter));
     if(watchdogCounter <= 0){
@@ -551,8 +580,10 @@ void updateStateBehavior(uint8_t state){
           filterFactor = DEFAULT_SMOOTHING_FACTOR;
           behaviorUpdatePeriod = PERIOD_TIMEVISUUPDATE;
         }
-        uint8_t hours = ntp.getHours24();
-        uint8_t minutes = ntp.getMinutes();
+        uint8_t hours = tm.tm_hour;
+        uint8_t minutes = tm.tm_min;
+        //uint8_t hours = ntp.getHours24();
+        //uint8_t minutes = ntp.getMinutes();
         static uint8_t lastMinutes = 0;
         static String timeAsString = "";
         if(lastMinutes != minutes){
@@ -566,8 +597,10 @@ void updateStateBehavior(uint8_t state){
     // state diclock
     case st_diclock:
       {
-        int hours = ntp.getHours24();
-        int minutes = ntp.getMinutes();
+        int hours = tm.tm_hour;
+        int minutes = tm.tm_min;
+        //int hours = ntp.getHours24();
+        //int minutes = ntp.getMinutes();
         showDigitalClock(hours, minutes, maincolor_clock);
       }
       break;
@@ -631,8 +664,10 @@ void updateStateBehavior(uint8_t state){
  */
 void checkNightmode(){
   logger.logString("Check nightmode");
-  int hours = ntp.getHours24();
-  int minutes = ntp.getMinutes();
+  int hours = tm.tm_hour;
+  int minutes = tm.tm_min;
+  //int hours = ntp.getHours24();
+  //int minutes = ntp.getMinutes();
   
   nightMode = false; // Initial assumption
 

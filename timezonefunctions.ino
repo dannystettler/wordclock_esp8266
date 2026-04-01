@@ -91,9 +91,11 @@ String getJsonParameterValue(String json, String parameter, bool isString) {
  * @param ntp NTPClientPlus object to set the UTC offset
  * @return int 
  */
+
+ /*
 void updateUTCOffsetFromTimezoneAPI(UDPLogger &logger, NTPClientPlus &ntp) {
   bool res = requestAPIData(logger);
   if (res) {
     ntp.setUTCOffset(api_offset);      
   }
-}
+}*/

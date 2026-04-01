@@ -38,7 +38,6 @@
 
 // own libraries
 #include "udplogger.h"
-//#include "ntp_client_plus.h"
 #include "ledmatrix.h"
 #include "tetris.h"
 #include "snake.h"
@@ -135,7 +134,6 @@ const char WebserverURL[] = "www.wordclock.local";
 time_t now;                         // this are the seconds since Epoch (1970) - UTC
 tm tm; 
 
-int utcOffset = 60; // UTC offset in minutes
 
 // ----------------------------------------------------------------------------------
 //                                        GLOBAL VARIABLES
@@ -189,7 +187,6 @@ uint16_t behaviorUpdatePeriod = PERIOD_TIMEVISUUPDATE; // holdes the period in w
 // Create necessary global objects
 UDPLogger logger;
 WiFiUDP NTPUDP;
-//NTPClientPlus ntp = NTPClientPlus(NTPUDP, "pool.ntp.org", utcOffset, true);
 LEDMatrix ledmatrix = LEDMatrix(&matrix, brightness, &logger);
 Tetris mytetris = Tetris(&ledmatrix, &logger);
 Snake mysnake = Snake(&ledmatrix, &logger);
@@ -358,12 +355,6 @@ void setup() {
   delay(10);
   logger.logString("Reset Reason: " + ESP.getResetReason());
 
-  // setup NTP (old)
-  //updateUTCOffsetFromTimezoneAPI(logger, ntp);
-  //ntp.setupNTPClient();
-  //logger.logString("NTP running");
-  //logger.logString("Time: " +  ntp.getFormattedTime());
-
   // setup NTP
   logger.logString("NTP running");
   configTime(NTP_TZ, NTP_SERVER); // --> Here is the IMPORTANT ONE LINER needed in your sketch!
@@ -498,63 +489,19 @@ void loop() {
     else
       logger.logString("Wintertime");
 
-    
-    /* remove old ntp code
-    //old NTP 
-    int res = ntp.updateNTP();
-    if(res == 0){
-      ntp.calcDate();
-      logger.logString("NTP-Update successful");
-      logger.logString("Time: " +  ntp.getFormattedTime());
-      logger.logString("Date: " +  ntp.getFormattedDate());
-      logger.logString("Day of Week (Mon=1, Sun=7): " +  String(ntp.getDayOfWeek()));
-      logger.logString("Summertime: " + String(ntp.updateSWChange()));
-      lastNTPUpdate = millis();
-      watchdogCounter = 30;
-      checkNightmode();
-      if(waitForTimeAfterReboot && !nightMode){
-        // update mode (e.g. write the current time onto the matrix) first time after reboot
-        entryAction(currentState);
-        updateStateBehavior(currentState);
-        ledmatrix.drawOnMatrixInstant();
-      }
-      waitForTimeAfterReboot = false;
-    }
-    else if(res == -1){
-      logger.logString("NTP-Update not successful. Reason: Timeout");
-      lastNTPUpdate += 10000;
-      watchdogCounter--;
-    }
-    else if(res == 1){
-      logger.logString("NTP-Update not successful. Reason: Too large time difference");
-      logger.logString("Time: " +  ntp.getFormattedTime());
-      logger.logString("Date: " +  ntp.getFormattedDate());
-      logger.logString("Day of Week (Mon=1, Sun=7): " +  ntp.getDayOfWeek());
-      logger.logString("Summertime: " + String(ntp.updateSWChange()));
-      lastNTPUpdate += 10000;
-      watchdogCounter--;
-    }
-    else {
-      logger.logString("NTP-Update not successful. Reason: NTP time not valid (<1970)");
-      lastNTPUpdate += 10000;
-      watchdogCounter--;
-    } */
-
     logger.logString("Watchdog Counter: " + String(watchdogCounter));
     if(watchdogCounter <= 0){
         logger.logString("Trigger restart due to watchdog...");
         delay(100);
         ESP.restart();
-    }
-    
+    }   
   }
 
   // check if nightmode need to be activated
   if(millis() - lastNightmodeCheck > PERIOD_NIGHTMODECHECK && !waitForTimeAfterReboot){
     checkNightmode();
     lastNightmodeCheck = millis();
-  }
- 
+  } 
 }
 
 
@@ -582,8 +529,6 @@ void updateStateBehavior(uint8_t state){
         }
         uint8_t hours = tm.tm_hour;
         uint8_t minutes = tm.tm_min;
-        //uint8_t hours = ntp.getHours24();
-        //uint8_t minutes = ntp.getMinutes();
         static uint8_t lastMinutes = 0;
         static String timeAsString = "";
         if(lastMinutes != minutes){
@@ -599,8 +544,6 @@ void updateStateBehavior(uint8_t state){
       {
         int hours = tm.tm_hour;
         int minutes = tm.tm_min;
-        //int hours = ntp.getHours24();
-        //int minutes = ntp.getMinutes();
         showDigitalClock(hours, minutes, maincolor_clock);
       }
       break;
@@ -666,9 +609,7 @@ void checkNightmode(){
   logger.logString("Check nightmode");
   int hours = tm.tm_hour;
   int minutes = tm.tm_min;
-  //int hours = ntp.getHours24();
-  //int minutes = ntp.getMinutes();
-  
+    
   nightMode = false; // Initial assumption
 
   // Convert all times to minutes for easier comparison

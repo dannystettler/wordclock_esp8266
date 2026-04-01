@@ -83,19 +83,3 @@ String getJsonParameterValue(String json, String parameter, bool isString) {
   }
   return value;
 }
-
-/**
- * @brief Update the UTC offset from the timezone string obtained from the IP-API
- * 
- * @param logger UDPLogger object to log messages
- * @param ntp NTPClientPlus object to set the UTC offset
- * @return int 
- */
-
- /*
-void updateUTCOffsetFromTimezoneAPI(UDPLogger &logger, NTPClientPlus &ntp) {
-  bool res = requestAPIData(logger);
-  if (res) {
-    ntp.setUTCOffset(api_offset);      
-  }
-}*/

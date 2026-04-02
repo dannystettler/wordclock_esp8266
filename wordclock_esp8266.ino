@@ -134,6 +134,8 @@ const char WebserverURL[] = "www.wordclock.local";
 time_t now;                         // this are the seconds since Epoch (1970) - UTC
 tm tm; 
 
+// Watchdog counter to trigger restart if NTP update was not possible 30 times in a row (5min)
+int watchdogCounter = 30;
 
 // ----------------------------------------------------------------------------------
 //                                        GLOBAL VARIABLES
@@ -475,19 +477,27 @@ void loop() {
   // NTP time update
   if(millis() - lastNTPUpdate > PERIOD_NTPUPDATE){
 
-    //new NTP 
-    time(&now);                       // read the current time
-    localtime_r(&now, &tm);           // update the structure tm with the current time
-    lastNTPUpdate = millis();
-    logger.logString("New NTP-Update");
-    logger.logString("Date: " +  String(tm.tm_mday) + "." + String(tm.tm_mon + 1) + "." + String(tm.tm_year + 1900));
-    logger.logString("Time: " +  String(tm.tm_hour) + ":" + String(tm.tm_min) + ":" + String(tm.tm_sec));
-    logger.logString("Day of Week (Sun=0, Sat=6): " +  String(tm.tm_wday));
-     // Daylight Saving Time flag
-    if (tm.tm_isdst == 1)            
-      logger.logString("Summertime");
-    else
-      logger.logString("Wintertime");
+    time(&now); // read the current time
+
+    if (now > 15) { // when ntp time update was successful value is much bigger (senconds since 1970)
+      localtime_r(&now, &tm);           // update the structure tm with the current time
+      lastNTPUpdate = millis();
+      watchdogCounter = 30;
+      logger.logString("New NTP-Update");
+      logger.logString("Date: " +  String(tm.tm_mday) + "." + String(tm.tm_mon + 1) + "." + String(tm.tm_year + 1900));
+      logger.logString("Time: " +  String(tm.tm_hour) + ":" + String(tm.tm_min) + ":" + String(tm.tm_sec));
+      logger.logString("Day of Week (Sun=0, Sat=6): " +  String(tm.tm_wday));
+      // Daylight Saving Time flag
+      if (tm.tm_isdst == 1)            
+        logger.logString("Summertime");
+      else
+        logger.logString("Wintertime");
+    }
+    else {  // NTP time update unsuccessful
+      logger.logString("NTP-Update not successful");
+      lastNTPUpdate += 10000;
+      watchdogCounter--;
+    }
 
     logger.logString("Watchdog Counter: " + String(watchdogCounter));
     if(watchdogCounter <= 0){

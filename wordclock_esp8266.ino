@@ -261,7 +261,7 @@ void setup() {
   // if it does not connect it starts an access point with the specified name
   // here "wordclockAP"
   // and goes into a blocking loop awaiting configuration
-  wifiManager.autoConnect(AP_SSID);
+  wifiManager.autoConnect("WordclockAP");
 
   // if you get here you have connected to the WiFi
   Serial.println("Connected.");

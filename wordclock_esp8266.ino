@@ -51,7 +51,7 @@
 #define EEPROM_VERSION_CODE   3  // Change this value when defaults settings change
 
 // EEPROM address map (all uint8_t, 1 byte each)
-#define EEPROM_SIZE          14  // size of EEPROM to save persistent variables
+#define EEPROM_SIZE          15  // size of EEPROM to save persistent variables
 #define ADR_EEPROM_VERSION    0  // uint8_t
 #define ADR_NM_START_H        1  // uint8_t
 #define ADR_NM_END_H          2  // uint8_t
@@ -65,14 +65,16 @@
 #define ADR_NM_ACTIVATED     10  // uint8_t
 #define ADR_COLSHIFTSPEED    11  // uint8_t
 #define ADR_COLSHIFTACTIVE   12  // uint8_t
-#define ADR_NM_BRIGHTNESS    13  // uint8_t
+#define ADR_COLPRESET        13  // uint8_t
+#define ADR_NM_BRIGHTNESS    14  // uint8_t
+
 
 // DEFAULT SETTINGS (if one changes this, also increment the EEPROM_VERSION_CODE, to ensure that the EEPROM is updated with the new defaults)
 #define DEFAULT_NM_START_HOUR 22 // default start hour of nightmode (0-23)
 #define DEFAULT_NM_START_MIN 5   // default start minute of nightmode (0-59)
 #define DEFAULT_NM_END_HOUR 7    // default end hour of nightmode (0-23)
 #define DEFAULT_NM_END_MIN 0     // default end minute of nightmode (0-59)
-#define DEFAULT_BRIGHTNESS 40    // default brightness of LEDs (10-255)
+#define DEFAULT_BRIGHTNESS 80    // default brightness of LEDs (10-255)
 #define DEFAULT_MC_RED 200       // default main color red value
 #define DEFAULT_MC_GREEN 200     // default main color green value
 #define DEFAULT_MC_BLUE 0        // default main color blue value
@@ -80,9 +82,11 @@
 #define DEFAULT_NM_BRIGHTNESS 0 // default brightness during night mode (0-255)
 #define DEFAULT_COLSHIFT_SPEED 1 // needs to be between larger than 0 (1 = slowest, 255 = fastest)
 #define DEFAULT_COLSHIFT_ACTIVE 0 // if dynamic color shift is active (0 = deactivated, 1 = activated)
+#define DEFAULT_COLPRESET 0 // default color preset
 
 #define NEOPIXELPIN 5       // pin to which the NeoPixels are attached
 #define BUTTONPIN 14        // pin to which the button is attached
+#define LDRPIN A0          // pin to which the photoresistor is connected (analog valued from 0-1024) ambient light 
 #define LEFT 1
 #define RIGHT 2
 #define LINE 10
@@ -99,16 +103,17 @@
 #define PERIOD_TIMEVISUUPDATE 1000
 #define PERIOD_MATRIXUPDATE 100
 #define PERIOD_NIGHTMODECHECK 20000
+#define PERIOD_LDRCHECK 5000
 
 #define SHORTPRESS 100
 #define LONGPRESS 2000
 
-#define CURRENT_LIMIT_LED 2500 // limit the total current sonsumed by LEDs (mA)
+#define CURRENT_LIMIT_LED 3500 // limit the total current sonsumed by LEDs (mA)
 
 #define DEFAULT_SMOOTHING_FACTOR 0.5
 
 // number of colors in colors array
-#define NUM_COLORS 7
+#define NUM_COLORS 8
 
 // own datatype for matrix movement (snake and spiral)
 enum direction {right, left, up, down};
@@ -167,15 +172,16 @@ Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(WIDTH, HEIGHT+1, NEOPIXELPIN,
   NEO_GRB            + NEO_KHZ800);
 
 
-// seven predefined colors24bit (green, red, yellow, purple, orange, lightgreen, blue) 
+// seven predefined colors24bit (green, red, yellow, purple, orange, lightgreen, blue, gold) 
 const uint32_t colors24bit[NUM_COLORS] = {
-  LEDMatrix::Color24bit(0, 255, 0),
-  LEDMatrix::Color24bit(255, 0, 0),
-  LEDMatrix::Color24bit(200, 200, 0),
-  LEDMatrix::Color24bit(255, 0, 200),
-  LEDMatrix::Color24bit(255, 128, 0), 
-  LEDMatrix::Color24bit(0, 128, 0), 
-  LEDMatrix::Color24bit(0, 0, 255) };
+  LEDMatrix::Color24bit(0, 255, 0),       //green
+  LEDMatrix::Color24bit(255, 0, 0),       //red
+  LEDMatrix::Color24bit(200, 200, 0),     //yellow
+  LEDMatrix::Color24bit(255, 0, 200),     //purple
+  LEDMatrix::Color24bit(255, 128, 0),     //orange
+  LEDMatrix::Color24bit(0, 128, 0),       //lightgreen
+  LEDMatrix::Color24bit(0, 0, 255),       //blue
+  LEDMatrix::Color24bit(215, 148, 46) };  //gold    
 
 uint8_t brightness = DEFAULT_BRIGHTNESS;            // current brightness of leds
 bool sprialDir = false;
@@ -188,6 +194,7 @@ long lastStateChange = millis();    // time of last state change
 long lastNTPUpdate = millis() - (PERIOD_NTPUPDATE-3000);  // time of last NTP update
 long lastAnimationStep = millis();  // time of last Matrix update
 long lastNightmodeCheck = millis()  - (PERIOD_NIGHTMODECHECK-3000); // time of last nightmode check
+long lastLDRCheck = millis();       // time of last LDR ambient light check
 long buttonPressStart = 0;          // time of push button press start 
 uint16_t behaviorUpdatePeriod = PERIOD_TIMEVISUUPDATE; // holdes the period in which the behavior should be updated
 
@@ -206,8 +213,9 @@ bool stateAutoChange = false;                         // stores state of automat
 bool nightMode = false;                               // stores state of nightmode
 bool nightModeActivated = DEFAULT_NM_ACTIVATED;       // stores if the function nightmode is activated (its not the state of nightmode)
 bool ledOff = false;                                  // stores state of led off
-uint32_t maincolor_clock = colors24bit[2];            // color of the clock and digital clock
+uint32_t maincolor_clock = colors24bit[4];            // color of the clock and digital clock
 uint32_t maincolor_snake = colors24bit[1];            // color of the random snake animation
+uint8_t activeColorPreset = DEFAULT_COLPRESET;        // stores the number of the active color preset 
 bool apmode = false;                                  // stores if WiFi AP mode is active
 bool dynColorShiftActive = DEFAULT_COLSHIFT_ACTIVE;   // stores if dynamic color shift is active
 uint8_t dynColorShiftPhase = 0;                       // stores the phase of the dynamic color shift
@@ -255,6 +263,7 @@ void setup() {
     EEPROM.write(ADR_NM_ACTIVATED, DEFAULT_NM_ACTIVATED);
     EEPROM.write(ADR_COLSHIFTSPEED, DEFAULT_COLSHIFT_SPEED);
     EEPROM.write(ADR_COLSHIFTACTIVE, DEFAULT_COLSHIFT_ACTIVE);
+    EEPROM.write(ADR_COLPRESET, DEFAULT_COLPRESET);
     EEPROM.write(ADR_NM_BRIGHTNESS, DEFAULT_NM_BRIGHTNESS);
     EEPROM.commit();
   }
@@ -268,7 +277,7 @@ void setup() {
 
   if(ESP.getResetReason().equals("Power On") || ESP.getResetReason().equals("External System")){
     // Turn on minutes leds (blue)
-    ledmatrix.setMinIndicator(15, colors24bit[6]);
+    ledmatrix.setMinIndicator(15, colors24bit[6]);  //blue
     ledmatrix.drawOnMatrixInstant();
   }
 
@@ -295,7 +304,7 @@ void setup() {
   // if it does not connect it starts an access point with the specified name
   // here "wordclockAP"
   // and goes into a blocking loop awaiting configuration
-  wifiManager.autoConnect(AP_SSID);
+  wifiManager.autoConnect("WordclockAP");
 
   // if you get here you have connected to the WiFi
   Serial.println("Connected.");
@@ -326,7 +335,7 @@ void setup() {
 
   int timeoutcounter = 0;
   while (WiFi.status() != WL_CONNECTED && timeoutcounter < 30) {
-    ledmatrix.setMinIndicator(15, colors24bit[6]);
+    ledmatrix.setMinIndicator(15, colors24bit[6]); //blue
     ledmatrix.drawOnMatrixInstant();
     delay(250);
     ledmatrix.setMinIndicator(15, 0);
@@ -398,14 +407,13 @@ void setup() {
   loadNightmodeSettingsFromEEPROM();
   loadBrightnessSettingsFromEEPROM();
   loadColorShiftStateFromEEPROM();
-  loadNightmodeBrightnessFromEEPROM();
   
   if(ESP.getResetReason().equals("Power On") || ESP.getResetReason().equals("External System")){
     // test quickly each LED
     for(int r = 0; r < HEIGHT; r++){
         for(int c = 0; c < WIDTH; c++){
         matrix.fillScreen(0);
-        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[2]));
+        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[2])); //red
         matrix.show();
         delay(10); 
         }
@@ -452,13 +460,13 @@ void loop() {
 
   // send regularly heartbeat messages via UDP multicast
   if(millis() - lastheartbeat > PERIOD_HEARTBEAT){
-    logger.logString("Heartbeat, state: " + stateNames[currentState] + ", FreeHeap: " + ESP.getFreeHeap() + ", HeapFrag: " + ESP.getHeapFragmentation() + ", MaxFreeBlock: " + ESP.getMaxFreeBlockSize() + "\n");
+    logger.logString("Heartbeat, state: " + stateNames[currentState] + ", FreeHeap: " + ESP.getFreeHeap() + ", HeapFrag: " + ESP.getHeapFragmentation() + ", MaxFreeBlock: " + ESP.getMaxFreeBlockSize() + " , Brightness: " + brightness + "\n");
     lastheartbeat = millis();
 
     // Check wifi status (only if no apmode)
     if(!apmode && WiFi.status() != WL_CONNECTED){
       Serial.println("connection lost");
-      ledmatrix.gridAddPixel(0, 5, colors24bit[1]);
+      ledmatrix.gridAddPixel(0, 5, colors24bit[1]); //green
       ledmatrix.drawOnMatrixInstant();
       delay(1000);
     }
@@ -491,6 +499,15 @@ void loop() {
 
   // handle button press
   handleButton();
+
+  // LDR ambient light check
+  if(millis() - lastLDRCheck > PERIOD_LDRCHECK) {
+    logger.logString("LDR: " + String(analogRead(LDRPIN)));
+    brightness = 255 * analogRead(LDRPIN) / 1024;
+    if(brightness < 10) brightness = 10;
+    ledmatrix.setBrightness(brightness);
+    lastLDRCheck = millis();
+  }
 
   // handle state changes
   if(stateAutoChange && (millis() - lastStateChange > PERIOD_STATECHANGE) && !ledOff){
@@ -723,7 +740,7 @@ void entryAction(uint8_t state){
       ledmatrix.setDynamicColorShiftPhase(-1); // disable dyn. color shift
       if(stateAutoChange){
         behaviorUpdatePeriod = PERIOD_ANIMATION;
-        randomsnake(true, 8, colors24bit[1], -1);
+        randomsnake(true, 8, colors24bit[1], -1); //green
       }
       else{
         behaviorUpdatePeriod = PERIOD_SNAKE;
@@ -845,13 +862,26 @@ void handleButton(){
       ledOff = true;
     }
     else if((millis() - buttonPressStart) > SHORTPRESS){
-      // shortpress -> state change 
+      // shortpress -> cycle color preset 
       logger.logString("Button press ended - shortpress");
 
       if(ledOff){
         ledOff = false;
       }else{
-        stateChange((currentState + 1) % NUM_STATES, true);
+        //stateChange((currentState + 1) % NUM_STATES, true);
+
+        //loop through the Color Presets and save the preset to EEPROM
+        activeColorPreset = (EEPROM.read(ADR_COLPRESET) + 1) % NUM_COLORS;
+        EEPROM.write(ADR_COLPRESET, activeColorPreset);
+        EEPROM.commit();
+
+        uint8_t red = colors24bit[activeColorPreset] >> 16 & 0xff;
+        uint8_t green = colors24bit[activeColorPreset] >> 8 & 0xff;
+        uint8_t blue = colors24bit[activeColorPreset] & 0xff;
+
+        logger.logString("Colorpreset: " + String(activeColorPreset));
+        logger.logColor24bit(colors24bit[activeColorPreset]);
+        setMainColor(red, green, blue);
       }
       
     }
@@ -880,7 +910,7 @@ void loadMainColorFromEEPROM(){
   uint8_t green = EEPROM.read(ADR_MC_GREEN);
   uint8_t blue = EEPROM.read(ADR_MC_BLUE);
   if(int(red) + int(green) + int(blue) < 50){
-    maincolor_clock = colors24bit[2];
+    maincolor_clock = colors24bit[4];  //orange
   }else{
     maincolor_clock = LEDMatrix::Color24bit(red, green, blue);
   }
@@ -1055,7 +1085,7 @@ void handleCommand() {
     for(int r = 0; r < HEIGHT; r++){
       for(int c = 0; c < WIDTH; c++){
         matrix.fillScreen(0);
-        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[2]));
+        matrix.drawPixel(c, r, LEDMatrix::color24to16bit(colors24bit[4]));  //orange
         matrix.show();
         delay(10); 
         }
